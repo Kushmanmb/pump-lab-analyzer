@@ -38,3 +38,11 @@ test('selects use 16px text to avoid iOS focus zoom, and narrow tabs are handled
   assert.match(html, /@media\(max-width:420px\)/);
   assert.match(html, /@media\(max-width:710px\)[^@]{0,200}\.two\{grid-template-columns:1fr/);
 });
+
+test('forecast log does not offer post-round target-based z-scores', () => {
+  const forecast = fs.readFileSync(path.join(root, 'forecast.js'), 'utf8');
+  assert.doesNotMatch(html, /id="fcTarget"/);
+  assert.doesNotMatch(forecast, /\.z\b|\.expected\b/);
+  assert.match(forecast, /cashed out/);
+  assert.match(forecast, /popped/);
+});

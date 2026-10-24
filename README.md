@@ -10,3 +10,9 @@ The **Forecast** tab shows the exact theoretical first-pop distribution over the
 ## Development
 
 `npm test` runs the math and page-structure tests (Node 18+, no dependencies). The site is static; `index.html`, `pump-math.js` and `forecast.js` are served as-is by GitHub Pages.
+
+### Audit interpretation
+
+The local audit log counts **cashouts and pops separately**. It deliberately
+does **not** calculate expected wins or z-scores from results whose stop/target
+was entered after the round. The server seed hash cannot reveal a future result.

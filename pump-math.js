@@ -72,39 +72,23 @@
     return rows;
   }
 
-  const MIN_AUDIT_ROUNDS = 30;
-
-  // Entry: { difficulty, outcome: 'cashed'|'popped', pumps >= 1, target? }.
-  // cashed: survived `pumps` pumps. popped: the balloon popped on pump number `pumps`.
-  // Expected counts and z are only produced for rounds whose pre-declared `target` is resolvable,
-  // and only once there are MIN_AUDIT_ROUNDS of them; otherwise they are null.
+  // Historical outcomes are recorded descriptively. A pump target entered
+  // after a round is not an independently committed pre-round strategy, so
+  // pooled expected-win or z-score claims would be misleading here.
   function audit(entries) {
-    let cashed = 0, popped = 0, tested = 0, hits = 0, expected = 0, variance = 0;
+    let cashed = 0, popped = 0, invalid = 0;
     for (const e of entries) {
       const l = LEVELS[e.difficulty];
-      if (!l || !Number.isInteger(e.pumps) || e.pumps < 1 || e.pumps > l.max) continue;
+      if (!l || !Number.isInteger(e.pumps) || e.pumps < 1 ||
+          e.pumps > l.max || (e.outcome !== 'cashed' && e.outcome !== 'popped')) {
+        invalid++;
+        continue;
+      }
       if (e.outcome === 'cashed') cashed++;
-      else if (e.outcome === 'popped') popped++;
-      else continue;
-      const t = e.target;
-      if (!Number.isInteger(t) || t < 1 || t > l.max) continue;
-      let hit;
-      if (e.outcome === 'cashed') hit = e.pumps >= t ? true : null;
-      else hit = e.pumps > t;
-      if (hit === null) continue;
-      const p = survival(t, l.pops);
-      tested++;
-      if (hit) hits++;
-      expected += p;
-      variance += p * (1 - p);
+      else popped++;
     }
-    const enough = tested >= MIN_AUDIT_ROUNDS && variance > 0;
-    return {
-      rounds: cashed + popped, cashed, popped, tested, hits,
-      expected: enough ? expected : null,
-      z: enough ? (hits - expected) / Math.sqrt(variance) : null,
-    };
+    return { rounds: cashed + popped, cashed, popped, invalid };
   }
 
-  return { BOARD, HOUSE_RETURN, LEVELS, choose, survival, firstPopProbability, conditionalPop, payout, distribution, audit, MIN_AUDIT_ROUNDS };
+  return { BOARD, HOUSE_RETURN, LEVELS, choose, survival, firstPopProbability, conditionalPop, payout, distribution, audit };
 });

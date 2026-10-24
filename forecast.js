@@ -54,16 +54,13 @@
 
   function renderLog() {
     const log = load(LOG_KEY), a = M.audit(log);
-    g('fcLogRows').innerHTML = log.slice().reverse().slice(0, 50).map(e => `<tr><td>${esc(new Date(e.time).toLocaleString())}</td><td>${esc(e.difficulty)}</td><td>${esc(e.nonce)}</td><td>${esc(e.pumps)}</td><td>${e.outcome === 'cashed' ? 'Cashed out' : 'Popped on pump ' + esc(e.pumps)}</td><td>${esc(e.client)}</td></tr>`).join('') || '<tr><td colspan="6">No results logged.</td></tr>';
-    const el = g('fcAudit');
-    el.className = 'status';
-    const retired = `${load(RET_KEY).length} retired pair(s) recorded.`;
-    if (!a.rounds) { el.textContent = 'No rounds logged yet. ' + retired; return; }
-    const base = `${a.rounds} round${a.rounds === 1 ? '' : 's'}: ${a.cashed} cashed out, ${a.popped} popped. `;
-    const stat = a.z === null
-      ? `No expected-outcome comparison: it needs at least ${M.MIN_AUDIT_ROUNDS} rounds with a target set before playing (${a.tested} so far).`
-      : `Of ${a.tested} rounds with a pre-set target, ${a.hits} reached it vs ${a.expected.toFixed(1)} expected by theory (z = ${a.z.toFixed(2)}).`;
-    el.textContent = `${base}${stat} Descriptive only; it says nothing about the next round. ${retired}`;
+    g('fcLogRows').innerHTML = log.slice().reverse().slice(0, 50).map(e =>
+      `<tr><td>${esc(new Date(e.time).toLocaleString())}</td><td>${esc(e.difficulty)}</td><td>${esc(e.nonce)}</td><td>${esc(e.pumps)}</td><td>${e.outcome === 'cashed' ? 'Cashed out' : e.outcome === 'popped' ? 'Popped on pump ' + esc(e.pumps) : 'Unknown'}</td><td>${esc(e.client)}</td></tr>`
+    ).join('') || '<tr><td colspan="6">No results logged.</td></tr>';
+    const summary = `${a.rounds} valid completed round${a.rounds === 1 ? '' : 's'}: ${a.cashed} cashed out, ${a.popped} popped.`;
+    const skipped = a.invalid ? ` ${a.invalid} incomplete/invalid record(s) excluded.` : '';
+    g('fcAudit').className = 'status';
+    g('fcAudit').textContent = `${summary}${skipped} ${load(RET_KEY).length} retired pair(s) recorded. These counts do not predict future rounds; no statistical significance is inferred from stopping points.`;
   }
 
   function nonce() { const n = +g('fcNonce').value; return Number.isSafeInteger(n) && n >= 0 ? n : 0; }
@@ -85,27 +82,38 @@
 
   g('fcRotate').addEventListener('click', () => {
     const c = g('nextClient').value.trim(), h = g('nextHash').value.trim();
-    if (!c || !HASH_RE.test(h)) { setStatus(g('fcSeedStatus'), 'Fill in the prepared next client seed and a valid 64-character hash on the Current seeds tab first.', 'warn'); return; }
-    const ret = load(RET_KEY);
-    ret.push({ time: Date.now(), client: g('fcClient').value, hash: g('fcHash').value, lastNonce: nonce() });
-    save(RET_KEY, ret);
-    g('activeClient').value = c; g('activeHash').value = h; g('activeGames').value = '0';
-    g('nextClient').value = ''; g('nextHash').value = '';
-    ['activeClient', 'activeHash', 'nextClient', 'nextHash'].forEach(id => g(id).dispatchEvent(new Event('change')));
+    if (!c || !HASH_RE.test(h)) {
+      setStatus(g('fcSeedStatus'), 'Enter a next client seed and valid 64-character hash first.', 'warn');
+      return;
+    }
+    const retired = load(RET_KEY);
+    retired.push({ time: Date.now(), client: g('fcClient').value, hash: g('fcHash').value, lastNonce: nonce() });
+    // Reuse the existing rotation handler so the old pair is copied to the
+    // historical verifier and existing persisted settings remain compatible.
+    g('rotate').click();
+    save(RET_KEY, retired);
     setNonce(0);
     syncFromActive();
     renderLog();
   });
 
   g('fcLog').addEventListener('click', () => {
-    const name = g('fcDifficulty').value, max = M.LEVELS[name].max, pumps = Number(g('fcPumps').value);
-    if (!Number.isInteger(pumps) || pumps < 1 || pumps > max) { setStatus(g('fcAudit'), `Pumps must be a whole number from 1 to ${max}.`, 'bad'); return; }
-    const rawTarget = g('fcTarget').value.trim(), target = rawTarget === '' ? undefined : Number(rawTarget);
-    if (target !== undefined && (!Number.isInteger(target) || target < 1 || target > max)) { setStatus(g('fcAudit'), `Target must be blank or a whole number from 1 to ${max}.`, 'bad'); return; }
+    const name = g('fcDifficulty').value, max = M.LEVELS[name].max;
+    const pumps = Number(g('fcPumps').value), rawNonce = g('fcNonce').value;
+    if (!Number.isInteger(pumps) || pumps < 1 || pumps > max) {
+      setStatus(g('fcAudit'), `Pumps must be a whole number from 1 to ${max}.`, 'bad');
+      return;
+    }
+    if (rawNonce === '' || !Number.isSafeInteger(+rawNonce) || +rawNonce < 0) {
+      setStatus(g('fcAudit'), 'Enter a valid non-negative whole-number nonce before logging.', 'bad');
+      return;
+    }
     const log = load(LOG_KEY);
-    log.push({ time: Date.now(), difficulty: name, nonce: nonce(), pumps, target, outcome: g('fcOutcome').value, client: g('fcClient').value, hash: g('fcHash').value.trim() });
+    log.push({ time: Date.now(), difficulty: name, nonce: +rawNonce,
+      pumps, outcome: g('fcOutcome').value, client: g('fcClient').value,
+      hash: g('fcHash').value.trim() });
     save(LOG_KEY, log);
-    setNonce(nonce() + 1);
+    setNonce(+rawNonce + 1);
     renderLog();
   });
   g('fcClearLog').addEventListener('click', () => {

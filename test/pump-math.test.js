@@ -89,28 +89,29 @@ test('audit counts cashouts and pops separately', () => {
   assert.equal(a.popped, 3);
 });
 
-test('audit gives no expected value or z-score without targets or enough rounds', () => {
-  const noTargets = M.audit(rounds(100, { pumps: 1, outcome: 'cashed' }));
-  assert.equal(noTargets.expected, null);
-  assert.equal(noTargets.z, null);
-  const few = M.audit(rounds(M.MIN_AUDIT_ROUNDS - 1, { pumps: 2, target: 2, outcome: 'cashed' }));
-  assert.equal(few.tested, M.MIN_AUDIT_ROUNDS - 1);
-  assert.equal(few.expected, null);
-  assert.equal(few.z, null);
+test('audit never draws conclusions from post-hoc stopping targets', () => {
+  const sample = M.audit([
+    ...rounds(100, { pumps: 1, outcome: 'cashed', target: 1 }),
+    ...rounds(30, { pumps: 2, outcome: 'popped', target: 2 }),
+  ]);
+  assert.equal(sample.rounds, 130);
+  assert.equal(sample.cashed, 100);
+  assert.equal(sample.popped, 30);
+  assert.equal('expected' in sample, false);
+  assert.equal('z' in sample, false);
+  assert.equal('tested' in sample, false);
 });
 
-test('audit resolves targets correctly once enough rounds exist', () => {
-  const n = M.MIN_AUDIT_ROUNDS;
+test('audit excludes invalid outcomes and impossible pump counts', () => {
   const a = M.audit([
-    ...rounds(n - 2, { pumps: 2, target: 2, outcome: 'cashed' }),
-    { difficulty: 'medium', pumps: 2, target: 2, outcome: 'popped' },
-    { difficulty: 'medium', pumps: 3, target: 2, outcome: 'popped' },
-    { difficulty: 'medium', pumps: 1, target: 2, outcome: 'cashed' },
+    { difficulty: 'medium', pumps: 2, outcome: 'cashed' },
+    { difficulty: 'medium', pumps: 8, outcome: 'popped' },
+    { difficulty: 'medium', pumps: 23, outcome: 'popped' },
+    { difficulty: 'medium', pumps: 0, outcome: 'cashed' },
+    { difficulty: 'hard', pumps: 21, outcome: 'popped' },
+    { difficulty: 'medium', pumps: 4, outcome: 'unknown' },
   ]);
-  assert.equal(a.tested, n);
-  assert.equal(a.hits, n - 1);
-  close(a.expected, n * M.survival(2, 3));
-  assert.ok(Number.isFinite(a.z));
+  assert.deepEqual(a, { rounds: 2, cashed: 1, popped: 1, invalid: 4 });
 });
 
 test('unknown difficulty throws', () => assert.throws(() => M.distribution('nope'), RangeError));
