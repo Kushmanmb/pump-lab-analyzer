@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1923">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Pump Lab — Seed Analyzer</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="top">
+  <h1><span class="logo">◉</span> Pump Lab <small>Seed Analyzer</small></h1>
+  <p class="notice">Math &amp; verification tool. Probabilities are <strong>not predictions</strong>. A hashed server seed cannot reveal future pops. Data stays on this device.</p>
+</header>
+
+<main>
+<section id="tab-seeds" class="panel" data-panel>
+  <h2>Seed pairs</h2>
+  <form id="seedForm" autocomplete="off">
+    <h3>Active pair</h3>
+    <label>Client seed <input id="activeClient" type="text" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    <label>Server seed hash (SHA-256) <input id="activeHash" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="64 hex characters"></label>
+    <h3>Next pair</h3>
+    <label>Next client seed <input id="nextClient" type="text" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    <label>Next server seed hash <input id="nextHash" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="64 hex characters"></label>
+    <div class="row">
+      <button type="submit" class="primary">Save seeds</button>
+      <button type="button" id="rotateBtn">Rotate: next → active</button>
+    </div>
+    <p id="seedMsg" class="msg" role="status"></p>
+  </form>
+  <h3>Rotation log</h3>
+  <ol id="rotationLog" class="log"></ol>
+</section>
+
+<section id="tab-calc" class="panel" data-panel hidden>
+  <h2>Probability calculator</h2>
+  <div class="seg" id="diffSeg" role="group" aria-label="Difficulty"></div>
+  <p id="diffInfo" class="muted"></p>
+  <div class="row">
+    <label class="grow">Pumps planned <input id="pumpCount" type="number" inputmode="numeric" min="1" max="25" value="5"></label>
+  </div>
+  <div id="calcResult" class="cards"></div>
+  <p class="muted">Each of the 25 positions is equally likely to hold a pop, so risk is pure combinatorics (hypergeometric). It describes odds over many rounds and says nothing about any specific upcoming round.</p>
+  <div id="grid" class="grid" aria-label="25 pump positions"></div>
+  <div class="tablewrap"><table id="probTable"><thead><tr><th>Pump</th><th>Risk this pump</th><th>Pop exactly here</th><th>Cumulative pop</th><th>Survive</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="tab-verify" class="panel" data-panel hidden>
+  <h2>Verify a past round</h2>
+  <p class="muted">Only possible after the server seed is revealed (seed rotated).</p>
+  <form id="verifyForm" autocomplete="off">
+    <label>Revealed server seed <input id="vServer" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" required></label>
+    <label>Expected hash (committed before play) <input id="vHash" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="64 hex characters"></label>
+    <label>Client seed <input id="vClient" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" required></label>
+    <div class="row">
+      <label class="grow">Nonce <input id="vNonce" type="number" inputmode="numeric" min="0" step="1" required></label>
+      <label class="grow">Difficulty <select id="vDiff"></select></label>
+    </div>
+    <label>Pop pump you observed (optional) <input id="vObserved" type="number" inputmode="numeric" min="1" max="25"></label>
+    <div class="row">
+      <button type="submit" class="primary">Verify</button>
+      <button type="button" id="useActive">Fill from active pair</button>
+    </div>
+  </form>
+  <div id="verifyResult" class="cards"></div>
+</section>
+
+<section id="tab-history" class="panel" data-panel hidden>
+  <h2>Nonce &amp; history</h2>
+  <form id="nonceForm">
+    <div class="row">
+      <label class="grow">Current nonce <input id="nonceInput" type="number" inputmode="numeric" min="0" step="1" value="0"></label>
+      <button type="button" id="nonceInc">+1</button>
+    </div>
+    <div class="row">
+      <label class="grow">Outcome pump (optional) <input id="logPump" type="number" inputmode="numeric" min="1" max="25"></label>
+      <label class="grow">Difficulty <select id="logDiff"></select></label>
+    </div>
+    <div class="row"><button type="submit" class="primary">Log round &amp; advance nonce</button></div>
+  </form>
+  <div class="row">
+    <button type="button" id="exportBtn">Export JSON</button>
+    <button type="button" id="clearBtn" class="danger">Clear all data</button>
+  </div>
+  <div class="tablewrap"><table id="histTable"><thead><tr><th>#</th><th>Seed pair</th><th>Nonce</th><th>Diff</th><th>Seen</th><th>Verified</th></tr></thead><tbody></tbody></table></div>
+  <p id="histMsg" class="msg" role="status"></p>
+</section>
+</main>
+
+<nav class="tabs" aria-label="Sections">
+  <button data-tab="seeds" class="active">Seeds</button>
+  <button data-tab="calc">Odds</button>
+  <button data-tab="verify">Verify</button>
+  <button data-tab="history">History</button>
+</nav>
+
+<script src="js/pumpfair.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

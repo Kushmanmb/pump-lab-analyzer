@@ -1,0 +1,10 @@
+{
+  "name": "pump-lab-analyzer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pump Lab - Seed Analyzer: client-side provably fair verifier and probability calculator",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node --check js/pumpfair.js && node --check js/app.js"
+  }
+}
