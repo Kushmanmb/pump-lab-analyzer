@@ -32,3 +32,9 @@ test('scripts referenced by the page exist and the verifier is intact', () => {
   assert.match(html, /id="verifyButton"/);
   assert.match(html, /cannot be determined/);
 });
+
+test('selects use 16px text to avoid iOS focus zoom, and narrow tabs are handled', () => {
+  assert.match(html, /\.field select\{font-size:16px\}/);
+  assert.match(html, /@media\(max-width:420px\)/);
+  assert.match(html, /@media\(max-width:710px\)[^@]{0,200}\.two\{grid-template-columns:1fr/);
+});

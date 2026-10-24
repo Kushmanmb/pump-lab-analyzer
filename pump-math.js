@@ -44,9 +44,9 @@
     return ratio(choose(BOARD - j, pops - 1), choose(BOARD, pops));
   }
 
-  // P(pump k+1 pops | first k pumps safe) = pops / (25-k)
+  // P(pump k+1 pops | first k pumps safe) = pops / (25-k); null when k safe pumps is impossible.
   function conditionalPop(k, pops) {
-    if (!Number.isInteger(k) || k < 0 || k >= BOARD) return 0;
+    if (!Number.isInteger(k) || k < 0 || k > BOARD - pops) return null;
     return pops / (BOARD - k);
   }
 
@@ -72,21 +72,39 @@
     return rows;
   }
 
-  // Compares logged outcomes with the theoretical survival chance. Descriptive only.
+  const MIN_AUDIT_ROUNDS = 30;
+
+  // Entry: { difficulty, outcome: 'cashed'|'popped', pumps >= 1, target? }.
+  // cashed: survived `pumps` pumps. popped: the balloon popped on pump number `pumps`.
+  // Expected counts and z are only produced for rounds whose pre-declared `target` is resolvable,
+  // and only once there are MIN_AUDIT_ROUNDS of them; otherwise they are null.
   function audit(entries) {
-    let n = 0, survived = 0, expected = 0, variance = 0;
+    let cashed = 0, popped = 0, tested = 0, hits = 0, expected = 0, variance = 0;
     for (const e of entries) {
       const l = LEVELS[e.difficulty];
-      if (!l || !Number.isInteger(e.pumps) || e.pumps < 0 || e.pumps > l.max) continue;
-      const p = survival(e.pumps, l.pops);
-      n++;
+      if (!l || !Number.isInteger(e.pumps) || e.pumps < 1 || e.pumps > l.max) continue;
+      if (e.outcome === 'cashed') cashed++;
+      else if (e.outcome === 'popped') popped++;
+      else continue;
+      const t = e.target;
+      if (!Number.isInteger(t) || t < 1 || t > l.max) continue;
+      let hit;
+      if (e.outcome === 'cashed') hit = e.pumps >= t ? true : null;
+      else hit = e.pumps > t;
+      if (hit === null) continue;
+      const p = survival(t, l.pops);
+      tested++;
+      if (hit) hits++;
       expected += p;
       variance += p * (1 - p);
-      if (e.outcome === 'cashed') survived++;
     }
-    const z = variance > 0 ? (survived - expected) / Math.sqrt(variance) : 0;
-    return { rounds: n, survived, expected, z };
+    const enough = tested >= MIN_AUDIT_ROUNDS && variance > 0;
+    return {
+      rounds: cashed + popped, cashed, popped, tested, hits,
+      expected: enough ? expected : null,
+      z: enough ? (hits - expected) / Math.sqrt(variance) : null,
+    };
   }
 
-  return { BOARD, HOUSE_RETURN, LEVELS, choose, survival, firstPopProbability, conditionalPop, payout, distribution, audit };
+  return { BOARD, HOUSE_RETURN, LEVELS, choose, survival, firstPopProbability, conditionalPop, payout, distribution, audit, MIN_AUDIT_ROUNDS };
 });

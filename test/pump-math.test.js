@@ -57,16 +57,60 @@ test('exact enumeration agrees for a small identity', () => {
   assert.equal(M.choose(5, 7), 0n);
 });
 
-test('audit compares outcomes with expectation and ignores invalid rows', () => {
+test('conditional pop risk never exceeds 100% and is null when unreachable', () => {
+  for (const [name, { pops }] of Object.entries(M.LEVELS)) {
+    for (const r of M.distribution(name)) {
+      if (r.conditionalPop === null) assert.ok(r.position - 1 > 25 - pops, `${name} pos ${r.position}`);
+      else assert.ok(r.conditionalPop > 0 && r.conditionalPop <= 1, `${name} pos ${r.position}: ${r.conditionalPop}`);
+    }
+  }
+  assert.equal(M.conditionalPop(23, 3), null);
+  assert.equal(M.conditionalPop(22, 3), 1);
+  assert.equal(M.conditionalPop(24, 1), 1);
+  assert.equal(M.conditionalPop(25, 1), null);
+  assert.equal(M.conditionalPop(15, 10), 1);
+  assert.equal(M.conditionalPop(16, 10), null);
+  assert.equal(M.conditionalPop(-1, 3), null);
+});
+
+const rounds = (n, e) => Array.from({ length: n }, () => ({ difficulty: 'medium', ...e }));
+
+test('audit counts cashouts and pops separately', () => {
   const a = M.audit([
-    { difficulty: 'medium', pumps: 1, outcome: 'cashed' },
-    { difficulty: 'medium', pumps: 1, outcome: 'popped' },
+    ...rounds(2, { pumps: 3, outcome: 'cashed' }),
+    ...rounds(3, { pumps: 2, outcome: 'popped' }),
+    { difficulty: 'medium', pumps: 0, outcome: 'popped' },
     { difficulty: 'bogus', pumps: 1, outcome: 'cashed' },
     { difficulty: 'easy', pumps: 99, outcome: 'cashed' },
+    { difficulty: 'easy', pumps: 1, outcome: 'other' },
   ]);
-  assert.equal(a.rounds, 2);
-  assert.equal(a.survived, 1);
-  close(a.expected, 2 * 0.88);
+  assert.equal(a.rounds, 5);
+  assert.equal(a.cashed, 2);
+  assert.equal(a.popped, 3);
+});
+
+test('audit gives no expected value or z-score without targets or enough rounds', () => {
+  const noTargets = M.audit(rounds(100, { pumps: 1, outcome: 'cashed' }));
+  assert.equal(noTargets.expected, null);
+  assert.equal(noTargets.z, null);
+  const few = M.audit(rounds(M.MIN_AUDIT_ROUNDS - 1, { pumps: 2, target: 2, outcome: 'cashed' }));
+  assert.equal(few.tested, M.MIN_AUDIT_ROUNDS - 1);
+  assert.equal(few.expected, null);
+  assert.equal(few.z, null);
+});
+
+test('audit resolves targets correctly once enough rounds exist', () => {
+  const n = M.MIN_AUDIT_ROUNDS;
+  const a = M.audit([
+    ...rounds(n - 2, { pumps: 2, target: 2, outcome: 'cashed' }),
+    { difficulty: 'medium', pumps: 2, target: 2, outcome: 'popped' },
+    { difficulty: 'medium', pumps: 3, target: 2, outcome: 'popped' },
+    { difficulty: 'medium', pumps: 1, target: 2, outcome: 'cashed' },
+  ]);
+  assert.equal(a.tested, n);
+  assert.equal(a.hits, n - 1);
+  close(a.expected, n * M.survival(2, 3));
+  assert.ok(Number.isFinite(a.z));
 });
 
 test('unknown difficulty throws', () => assert.throws(() => M.distribution('nope'), RangeError));

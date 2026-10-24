@@ -5,7 +5,7 @@
   const g = id => document.getElementById(id);
   const LOG_KEY = 'pumpLabHistoryV1', RET_KEY = 'pumpLabRetiredV1', NONCE_KEY = 'pumpLabNonceV1';
   const HASH_RE = /^[0-9a-f]{64}$/i;
-  const pct = p => { const n = 100 * p; return (n >= 1 || n === 0 ? n.toFixed(2) : n.toFixed(4)) + '%'; };
+  const pct = p => { if (p === null) return 'N/A'; const n = 100 * p; return (n >= 1 || n === 0 ? n.toFixed(2) : n.toFixed(4)) + '%'; };
   const mult = v => v ? v.toFixed(2) + '×' : '—';
 
   const load = key => { try { const v = JSON.parse(localStorage.getItem(key)); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
@@ -36,16 +36,16 @@
   function renderChart() {
     const name = g('fcDifficulty').value, { pops, max } = M.LEVELS[name];
     const rows = M.distribution(name);
-    const vals = rows.map(r => r[metric]);
+    const vals = rows.map(r => r[metric] ?? 0);
     const top = Math.max(...vals) || 1;
     if (selected > 25) selected = 25;
     g('fcChart').innerHTML = rows.map((r, i) => {
       const off = !r.playable || vals[i] === 0;
-      return `<button type="button" class="fc-bar${off ? ' off' : ''}" data-pos="${r.position}" aria-pressed="${r.position === selected}" aria-label="Position ${r.position}: ${pct(vals[i])}" style="height:${Math.max(2, 100 * vals[i] / top)}%"></button>`;
+      return `<button type="button" class="fc-bar${off ? ' off' : ''}" data-pos="${r.position}" aria-pressed="${r.position === selected}" aria-label="Position ${r.position}: ${pct(r[metric])}" style="height:${Math.max(2, 100 * vals[i] / top)}%"></button>`;
     }).join('');
     g('fcAxis').innerHTML = rows.map(r => `<span>${r.position}</span>`).join('');
     const r = rows[selected - 1];
-    g('fcDetail').innerHTML = `<strong>Position ${r.position}</strong> · ${pops} pop${pops === 1 ? '' : 's'}, max ${max} pumps<br>First pop exactly here: ${pct(r.firstPop)} · Survive through here: ${pct(r.survive)} · Pop risk if alive on arrival: ${pct(r.conditionalPop)} · Payout: ${r.playable ? mult(r.payout) : 'not playable'}`;
+    g('fcDetail').innerHTML = `<strong>Position ${r.position}</strong> · ${pops} pop${pops === 1 ? '' : 's'}, max ${max} pumps<br>First pop exactly here: ${pct(r.firstPop)} · Survive through here: ${pct(r.survive)} · Pop risk if alive on arrival: ${r.conditionalPop === null ? 'N/A (position unreachable)' : pct(r.conditionalPop)} · Payout: ${r.playable ? mult(r.payout) : 'not playable'}`;
     g('fcRows').innerHTML = rows.filter(r => r.playable).map(r => `<tr class="${r.position === selected ? 'selected' : ''}"><td>${r.position}</td><td>${pct(r.survive)}</td><td>${r.position < max ? pct(M.conditionalPop(r.position, pops)) : '—'}</td><td>${mult(r.payout)}</td></tr>`).join('');
     g('fcPumps').max = max;
   }
@@ -54,12 +54,16 @@
 
   function renderLog() {
     const log = load(LOG_KEY), a = M.audit(log);
-    g('fcLogRows').innerHTML = log.slice().reverse().slice(0, 50).map(e => `<tr><td>${esc(new Date(e.time).toLocaleString())}</td><td>${esc(e.difficulty)}</td><td>${esc(e.nonce)}</td><td>${esc(e.pumps)}</td><td>${e.outcome === 'cashed' ? 'Cashed' : 'Popped'}</td><td>${esc(e.client)}</td></tr>`).join('') || '<tr><td colspan="6">No results logged.</td></tr>';
+    g('fcLogRows').innerHTML = log.slice().reverse().slice(0, 50).map(e => `<tr><td>${esc(new Date(e.time).toLocaleString())}</td><td>${esc(e.difficulty)}</td><td>${esc(e.nonce)}</td><td>${esc(e.pumps)}</td><td>${e.outcome === 'cashed' ? 'Cashed out' : 'Popped on pump ' + esc(e.pumps)}</td><td>${esc(e.client)}</td></tr>`).join('') || '<tr><td colspan="6">No results logged.</td></tr>';
     const el = g('fcAudit');
     el.className = 'status';
-    el.textContent = a.rounds
-      ? `${a.rounds} logged round${a.rounds === 1 ? '' : 's'}: ${a.survived} survived vs ${a.expected.toFixed(2)} expected by theory (z = ${a.z.toFixed(2)}). Small samples vary widely and say nothing about the next round. ${load(RET_KEY).length} retired pair(s) recorded.`
-      : 'No rounds logged yet.';
+    const retired = `${load(RET_KEY).length} retired pair(s) recorded.`;
+    if (!a.rounds) { el.textContent = 'No rounds logged yet. ' + retired; return; }
+    const base = `${a.rounds} round${a.rounds === 1 ? '' : 's'}: ${a.cashed} cashed out, ${a.popped} popped. `;
+    const stat = a.z === null
+      ? `No expected-outcome comparison: it needs at least ${M.MIN_AUDIT_ROUNDS} rounds with a target set before playing (${a.tested} so far).`
+      : `Of ${a.tested} rounds with a pre-set target, ${a.hits} reached it vs ${a.expected.toFixed(1)} expected by theory (z = ${a.z.toFixed(2)}).`;
+    el.textContent = `${base}${stat} Descriptive only; it says nothing about the next round. ${retired}`;
   }
 
   function nonce() { const n = +g('fcNonce').value; return Number.isSafeInteger(n) && n >= 0 ? n : 0; }
@@ -95,9 +99,11 @@
 
   g('fcLog').addEventListener('click', () => {
     const name = g('fcDifficulty').value, max = M.LEVELS[name].max, pumps = Number(g('fcPumps').value);
-    if (!Number.isInteger(pumps) || pumps < 0 || pumps > max) { setStatus(g('fcAudit'), `Pumps must be a whole number from 0 to ${max}.`, 'bad'); return; }
+    if (!Number.isInteger(pumps) || pumps < 1 || pumps > max) { setStatus(g('fcAudit'), `Pumps must be a whole number from 1 to ${max}.`, 'bad'); return; }
+    const rawTarget = g('fcTarget').value.trim(), target = rawTarget === '' ? undefined : Number(rawTarget);
+    if (target !== undefined && (!Number.isInteger(target) || target < 1 || target > max)) { setStatus(g('fcAudit'), `Target must be blank or a whole number from 1 to ${max}.`, 'bad'); return; }
     const log = load(LOG_KEY);
-    log.push({ time: Date.now(), difficulty: name, nonce: nonce(), pumps, outcome: g('fcOutcome').value, client: g('fcClient').value, hash: g('fcHash').value.trim() });
+    log.push({ time: Date.now(), difficulty: name, nonce: nonce(), pumps, target, outcome: g('fcOutcome').value, client: g('fcClient').value, hash: g('fcHash').value.trim() });
     save(LOG_KEY, log);
     setNonce(nonce() + 1);
     renderLog();
